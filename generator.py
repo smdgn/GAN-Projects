@@ -12,7 +12,7 @@ class BConv2DTranspose(tf.keras.Model):
     def call(self, x):
         x = self.conv_transpose(x)
         x = self.batchnorm(x)
-        return elu(x)
+        return relu(x, alpha = 0.3)
 
 class BConv2D(tf.keras.Model):
     def __init__(self, *args, **kwargs):
@@ -23,7 +23,7 @@ class BConv2D(tf.keras.Model):
     def call(self, x):
         x = self.conv(x)
         x = self.batch_norm(x)
-        return elu(x)
+        return relu(x, alpha = 0.3)
 
 class Generator(tf.keras.Model):
     def __init__(self):
