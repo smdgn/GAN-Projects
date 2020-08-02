@@ -7,4 +7,4 @@ Code is written for Tensorflow 1.5 and will not be updated to tensorflow 2.x as 
 Dataset taken from [Kaggle](https://www.kaggle.com/c/painter-by-numbers/overview)
 
 Current Version: \
-![](https://github.com/smdgn/images/blob/master/44.png) ![](https://github.com/smdgn/images/blob/master/33.png)
+<img src="https://github.com/smdgn/images/blob/master/44.png" width="224" height="224"> <img src="https://github.com/smdgn/images/blob/master/33.png" width="224" height="224">
