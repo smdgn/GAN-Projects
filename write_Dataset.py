@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-root = r"C:\Users\samed\OneDrive\Dokumente\Datasets\ArtDataset\train"
-write_dir = r"C:\Users\samed\OneDrive\Dokumente\Datasets\ArtDataset\TFrecord_train\art_train.tfrecord"
+root = r"xxx\train"
+write_dir = r"xxx\art_train.tfrecord"
 
 image_path = tfutils.retdir(root)
 partwriter = tfutils.tf_part_writer(write_dir, 1)
