@@ -5,3 +5,7 @@ GAN trained on Art of the past Centuries. This projects implements basic GAN Arc
 Training Set is converted and read via two basic read/write classes.  
 Code is written for Tensorflow 1.5 and will not be updated to tensorflow 2.x as of now.
 Dataset taken from [Kaggle](https://www.kaggle.com/c/painter-by-numbers/overview)
+
+Current Version: 
+(https://github.com/smdgn/images/blob/master/44.png)
+(https://github.com/smdgn/images/blob/master/33.png)
