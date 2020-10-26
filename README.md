@@ -6,7 +6,7 @@ Read the paper here: [Improved Training of Wasserstein GANs](https://arxiv.org/p
 Training Set is converted and read via two basic read/write classes.\
 Dataset taken from [Kaggle](https://www.kaggle.com/c/painter-by-numbers/overview) 
 
-Update Log: \
+# Update Log: 
 Changed Stride2 Upconvolution to Conv2D with bilinear Upsampling. \
 Input Image is downsampled and depth Concatenated to Featuremaps to enforce stronger gradients and low level distinction in the Discriminator. \
 BatchNormalization is omitted in the Discriminator and LayerNormalization is used instead. \
