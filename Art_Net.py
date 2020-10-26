@@ -5,98 +5,115 @@ import generator
 import loss_utils
 import utils
 import os
+import sys
 
 import tensorflow as tf
 from tensorboard.plugins.beholder import Beholder
 import tensorflow.summary as summary
 
+#resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu='grpc://' + os.environ['COLAB_TPU_ADDR'])
+#tf.config.experimental_connect_to_cluster(resolver)
+# This is the TPU initialization code that has to be at the beginning.
+#tf.tpu.experimental.initialize_tpu_system(resolver)
+#print("All devices: ", tf.config.list_logical_devices('TPU'))
 
-#tf.enable_eager_execution()
 
-#dir = r"C:\Users\samed\OneDrive\Dokumente\Datasets\ArtDataset\TFrecord_train"
-#datareader = art_datareader.DataReader(1, dir)
-
-#with tf.Session() as sess:
-    #tf.global_variables_initializer().run()
-    #while(1):
-        #frame = datareader.read()
-        #frame = sess.run(frame)
-        #imgplot = plt.imshow(np.squeeze(frame, axis=0))
-        #plt.show()
-S_max = int(50000)
+epochs = int(100)
 batch_size = 16
 lr = 1e-4
-
+gp_lamda = 10.
 #dir = "C:\\Users\\samed\\OneDrive\\Dokumente\\Datasets\\ArtDataset\\TFrecord_train"
 #logs_path = "C:\\Users\\samed\\OneDrive\\Dokumente\\Datasets\\Logs" 
 
 directory = "/content/drive/My Drive/Art_Net/Dataset"
 logs_path= "/content/drive/My Drive/Art_Net/Logs"
+model_path ="/content/drive/My Drive/Art_Net/Model"
 
 if __name__ == '__main__':
     #session_name = utils.get_session_name()
-    session_logs_path = logs_path + "/" + "Test2"
-    glob_step = tf.Variable(0, name='global_step', trainable=False) 
+    session_logs_path = logs_path + "/" + "Test3"
 
     datareader = art_datareader.DataReader(batch_size, directory)
     img_generator = generator.Generator()
     discriminator = generator.Discriminator()
 
-    #generator_optimizer = tf.train.AdamOptimizer(learning_rate = lr)
-    #discriminator_optimizer = tf.train.AdamOptimizer(learning_rate= lr)
+    #generator_optimizer = tf.keras.optimizers.RMSprop(learning_rate=lr)  #Wgan uses RMSprop
+    #discriminator_optimizer = tf.keras.optimizers.RMSprop(learning_rate=lr) 
 
-    generator_optimizer = tf.keras.optimizers.Adam(lr)
-    discriminator_optimizer = tf.keras.optimizers.Adam(lr)
+    generator_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, beta_1 = 0.5, beta_2=0.9)  #Wgan gp uses adam
+    discriminator_optimizer = tf.keras.optimizers.Adam(learning_rate=lr, beta_1 = 0.5, beta_2=0.9)
 
-    beholder = Beholder(session_logs_path)
-
-    img = datareader.read()
+    writer = tf.summary.create_file_writer(session_logs_path, max_queue=0)
+    checkpoint_prefix = os.path.join(model_path, "ckpt")
+    checkpoint = tf.train.Checkpoint(generator_optimizer=generator_optimizer, discriminator_optimizer=discriminator_optimizer, img_generator=img_generator, discriminator=discriminator)
         
-    noise = tf.random.normal([batch_size, 100])
-    img = img + tf.random.normal([16, 550, 600, 3], stddev=0.1)
-
-    with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
-      generated_image = img_generator(noise, training=True)
-      fake_output = discriminator(generated_image, training=True)
-      real_output = discriminator(img, training=True)
-
-      gen_loss = loss_utils.generator_loss(fake_output)
-      disc_loss = loss_utils.discriminator_loss(real_output, fake_output)
     
-    gradients_of_generator = gen_tape.gradient(gen_loss, img_generator.trainable_variables)
-    gradients_of_discriminator = disc_tape.gradient(disc_loss, discriminator.trainable_variables)
+    @tf.function  #Training function
+    def train_step_d(img):
 
-    gen_optimize = generator_optimizer.apply_gradients(zip(gradients_of_generator, img_generator.trainable_variables))
-    disc_optimize = discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, discriminator.trainable_variables))
+        img = img + tf.random.normal([batch_size, 448, 448, 3], stddev=0.05) #make the discriminator more robust
+        noise = tf.random.normal([batch_size, 100]) #latent noise vector
+        alpha = tf.random.uniform([batch_size, 1, 1, 1], 0., 1.)
+        generated_image = img_generator(noise, training=True)
+        interpolate = img + (alpha * (generated_image- img))
+        with tf.GradientTape() as grad:
+            grad.watch(interpolate)
+            prediction = discriminator(interpolate, training=True)
+        gradient = grad.gradient(prediction, [interpolate])[0]
+        slopes = tf.sqrt(tf.reduce_sum(tf.square(gradient), axis = [1,2,3]))
+        gp_loss = tf.reduce_mean((slopes-1.)**2)
 
-    #gen_optimize = generator_optimizer.minimize(gen_loss+disc_loss, global_step=tf.train.get_global_step())
-    #disc_optimize = discriminator_optimizer.minimize(disc_loss, global_step=tf.train.get_global_step())
+        with tf.GradientTape() as disc_tape:
+            disc_tape.watch(generated_image)
+            fake_output = discriminator(generated_image, training=True)
+            real_output = discriminator(img, training=True)
 
-    fake_metric = tf.reduce_sum(fake_output)/batch_size
-    real_metric = tf.reduce_sum(real_output)/batch_size
+            disc_loss = loss_utils.discriminator_loss_w(real_output, fake_output)
+            #gp_loss = loss_utils.gradient_penalty(generated_image, img, discriminator)
+            disc_loss += gp_loss*gp_lamda
 
-    summary.scalar("gen_loss", gen_loss, family="train")
-    summary.scalar("disc_loss", disc_loss, family="train")
-    summary.scalar("fake_metric", fake_metric, family="train")
-    summary.scalar("real_metric", real_metric, family="train")
-    summary.image("real_image", utils.cast_im(img), max_outputs=3)
-    summary.image("fake_image", utils.cast_im(generated_image), max_outputs=3)
+        gradients_of_discriminator = disc_tape.gradient(disc_loss, discriminator.trainable_variables)
+        disc_optimize = discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, discriminator.trainable_variables))
 
-    with tf.Session() as sess:
-        tf.global_variables_initializer().run()
-        writer = summary.FileWriter(session_logs_path, sess.graph, max_queue=0)
+        return disc_loss
 
-            
-        for s in range(S_max):
-            dl, *_ = sess.run([disc_loss, disc_optimize])
-            gl, *_ = sess.run([gen_loss, gen_optimize])
-            sess.run(gen_optimize)
-            beholder.update(session=sess)
+    @tf.function  #Training function
+    def train_step_g():
+        noise = tf.random.normal([batch_size, 100]) #latent noise vector
+        with tf.GradientTape() as gen_tape:
+            generated_image = img_generator(noise, training=True)
+            fake_output = discriminator(generated_image, training=True)
 
-            if s % 50 == 0:
-                writer.add_summary(sess.run(summary.merge_all()), s)
-                fake, real = sess.run([fake_metric, real_metric])
-                print("Iteration: {} Generator_Loss: {} Discriminator_Loss: {}".format(s, gl, dl))
-                print("Fake Metrix: {} Real Metric: {}".format(fake, real))
+            gen_loss = loss_utils.generator_loss_w(fake_output)
+    
+        gradients_of_generator = gen_tape.gradient(gen_loss, img_generator.trainable_variables)
+        gen_optimize = generator_optimizer.apply_gradients(zip(gradients_of_generator, img_generator.trainable_variables))
+
+        return gen_loss, generated_image
+
+    s= np.int64(0)
+    for e in range(epochs):  #actual training
+
+        for imagebatch in datareader.data:
+            for _ in range(5):
+                d_loss = train_step_d(imagebatch)
+            g_loss, fake_img = train_step_g()
+
+            s += 1
+
+            if s % 50 == 0:  #log every 50 training steps
+
+                with writer.as_default():
+                    summary.scalar("gen_loss", g_loss, description="train", step=s)
+                    summary.scalar("disc_loss", d_loss, description="train", step=s)
+                    summary.image("real_image", utils.cast_im(imagebatch), max_outputs=3, step=s)
+                    summary.image("fake_image", utils.cast_im(fake_img), max_outputs=3, step=s)
+                    print("Epoch: {}  Step: {}  Gen_Loss: {}  Disc_Loss: {}".format(e, s, g_loss, d_loss))
+                    writer.flush()
+
+            if s % 1000 == 0:
+                checkpoint.save(file_prefix = checkpoint_prefix)
+
+        
 
 
