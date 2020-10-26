@@ -15,4 +15,4 @@ Added Gradientpenalty and Wassersteinloss.
 The GAN currently struggels to converge and will be updated shortly.
 
 Current Version: \
-<img src="https://github.com/smdgn/images/blob/master/44.png" width="224" height="224"> <img src="https://github.com/smdgn/images/blob/master/33.png" width="224" height="224">
+<img src="https://github.com/smdgn/images/blob/master/wgan2.png" width="224" height="224"> <img src="https://github.com/smdgn/images/blob/master/Screenshot_2020-10-21%20individualImage%20(PNG-Grafik%2C%20448%20%C3%97%20448%20Pixel).png" width="224" height="224">
