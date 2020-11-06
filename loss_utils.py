@@ -25,7 +25,11 @@ def gradient_penalty(fake, real, discriminator):
     #fake = tf.image.resize(fake, [w, h])
     alpha = tf.random.uniform([b, 1, 1, 1], 0., 1.)
     interpolate = real + (alpha * (fake- real))
+<<<<<<< HEAD
     with tf.GradientTape() as grad:
+=======
+    with tf.GradientTape(persistent=True) as grad:
+>>>>>>> cb74623bf62f8b9870e362de937ce970953c3eba
         grad.watch(interpolate)
         prediction = discriminator(interpolate, training=True)
     gradient = grad.gradient(prediction, [interpolate])[0]

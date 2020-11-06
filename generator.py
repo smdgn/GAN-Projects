@@ -34,7 +34,11 @@ class LConv2D(tf.keras.Model):
     def call(self, x):
         x = self.conv(x)
         x = self.layer_norm(x)
+<<<<<<< HEAD
         return relu(x, alpha = 0.2)
+=======
+        return relu(x, alpha = 0.3)
+>>>>>>> cb74623bf62f8b9870e362de937ce970953c3eba
 
 class Generator(tf.keras.Model):
     def __init__(self):
@@ -44,6 +48,7 @@ class Generator(tf.keras.Model):
 
         self.d1 = Dense(14*14*512, input_shape=(100,), activation='relu')
         self.conv1 = BConv2D(512, 3, strides=1, padding='SAME')
+<<<<<<< HEAD
         self.upscale1 = UpSampling2D(interpolation='nearest')
 
         self.conv2 = BConv2D(256, 3, strides=1, padding='SAME')
@@ -57,6 +62,21 @@ class Generator(tf.keras.Model):
 
         self.conv5 = BConv2D(32, 3, strides=1, padding='SAME')
         self.upscale5 = UpSampling2D(interpolation='nearest')
+=======
+        self.upscale1 = UpSampling2D(interpolation='bilinear')
+
+        self.conv2 = BConv2D(256, 3, strides=1, padding='SAME')
+        self.upscale2 = UpSampling2D(interpolation='bilinear')
+
+        self.conv3 = BConv2D(128, 3, strides=1, padding='SAME')
+        self.upscale3 = UpSampling2D(interpolation='bilinear')
+
+        self.conv4 = BConv2D(64, 3, strides=1, padding='SAME')
+        self.upscale4 = UpSampling2D(interpolation='bilinear')
+
+        self.conv5 = BConv2D(32, 3, strides=1, padding='SAME')
+        self.upscale5 = UpSampling2D(interpolation='bilinear')
+>>>>>>> cb74623bf62f8b9870e362de937ce970953c3eba
         self.out = Conv2D(3, 3, activation='tanh', padding='SAME')
 
     def call(self, x):
@@ -97,6 +117,7 @@ class Discriminator(tf.keras.Model):
 
     def call(self, x):
         x1 = self.conv1(x)
+<<<<<<< HEAD
         #b, w, h, c = x1.shape
         #x = tf.image.resize(x, [w, h])
         #x1 = tf.concat([x1, x], -1)    #residual block, depth concat
@@ -115,6 +136,26 @@ class Discriminator(tf.keras.Model):
         #b, w, h, c = x1.shape
         #x = tf.image.resize(x, [w, h])
         #x1 = tf.concat([x1, x], -1)
+=======
+        b, w, h, c = x1.shape
+        x = tf.image.resize(x, [w, h])
+        x1 = tf.concat([x1, x], -1)    #residual block, depth concat
+
+        x1 = self.conv2(x1)
+        b, w, h, c = x1.shape
+        x = tf.image.resize(x, [w, h])
+        x1 = tf.concat([x1, x], -1)
+
+        x1 = self.conv3(x1)
+        b, w, h, c = x1.shape
+        x = tf.image.resize(x, [w, h])
+        x1 = tf.concat([x1, x], -1)
+
+        x1 = self.conv4(x1)
+        b, w, h, c = x1.shape
+        x = tf.image.resize(x, [w, h])
+        x1 = tf.concat([x1, x], -1)
+>>>>>>> cb74623bf62f8b9870e362de937ce970953c3eba
 
         x1 = self.conv5(x1)
 

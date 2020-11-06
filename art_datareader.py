@@ -7,7 +7,11 @@ def _get_file_paths(root):
 
 def _convert_frame_data(data):
     decoded_frame = tf.image.decode_image(data)
+<<<<<<< HEAD
     return ((tf.cast(decoded_frame, tf.float32) / 255) *2.) -1.
+=======
+    return tf.cast(decoded_frame, tf.float32) / 255
+>>>>>>> cb74623bf62f8b9870e362de937ce970953c3eba
 
 
 
