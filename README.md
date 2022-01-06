@@ -9,4 +9,4 @@ You can read my summary of the evaluation [here.](https://github.com/smdgn/GAN-P
 [Projection Discriminator](https://arxiv.org/pdf/1802.05637.pdf)\
 [Spectral Normalization](https://arxiv.org/pdf/1802.05957.pdf)\
 [WGAN/WGANGP](https://arxiv.org/pdf/1704.00028.pdf)\
-[Hinge Loss/Geometric Gan](https://arxiv.org/pdf/1705.02894.pdf)\
+[Hinge Loss/Geometric Gan](https://arxiv.org/pdf/1705.02894.pdf)
