@@ -1,18 +1,12 @@
-# Art-GAN
-Generative Adversarial Network for Art Creation
+# GAN-Projects
+This is a repo implementing and evaluating several different Generative Adversarial Networks for learning purposes.
+This repo still needs a lot of refactoring and clean-up and is for learning purposes only.
+You can read my summary of the evaluation [here](https://github.com/smdgn/GAN-Projects/blob/master/Assessment_of_GANs_V1_0.pdf)
 
-GAN trained on Art of the past Centuries. This projects implements WGAN-GP Architecture for Tensorflow 2.x and is for learning purposes only. \
-Read the paper here: [Improved Training of Wasserstein GANs](https://arxiv.org/pdf/1704.00028.pdf).\
-Training Set is converted and read via two basic read/write classes.\
-Dataset taken from [Kaggle](https://www.kaggle.com/c/painter-by-numbers/overview) 
-
-# Update Log: 
-Changed Stride2 Upconvolution to Conv2D with bilinear Upsampling. \
-Input Image is downsampled and depth Concatenated to Featuremaps to enforce stronger gradients and low level distinction in the Discriminator. \
-BatchNormalization is omitted in the Discriminator and LayerNormalization is used instead. \
-Added Gradientpenalty and Wassersteinloss.
-
-The GAN currently struggels to converge and will be updated shortly.
-
-Current Version: \
-<img src="https://github.com/smdgn/images/blob/master/wgan2.png" width="224" height="224"> <img src="https://github.com/smdgn/images/blob/master/Screenshot_2020-10-21%20individualImage%20(PNG-Grafik%2C%20448%20%C3%97%20448%20Pixel).png" width="224" height="224">
+## Cited Papers
+[SAGAN](https://arxiv.org/pdf/1805.08318.pdf)
+[Conditional Batchnorm](https://arxiv.org/pdf/1707.00683.pdf)
+[Projection Discriminator](https://arxiv.org/pdf/1802.05637.pdf)
+[Spectral Normalization](https://arxiv.org/pdf/1802.05957.pdf)
+[WGAN/WGANGP](https://arxiv.org/pdf/1704.00028.pdf)
+[Hinge Loss/Geometric Gan](https://arxiv.org/pdf/1705.02894.pdf)
