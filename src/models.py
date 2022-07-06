@@ -1,17 +1,219 @@
+import datetime
+import math
+from pathlib import Path
+from abc import ABC
+
 import tensorflow as tf
-import tensorflow_addons 
+from tensorflow import keras
+import tensorflow_addons as tfa
 from tensorflow.keras.layers import BatchNormalization, Conv2D, \
     Dense, UpSampling2D, GlobalMaxPool2D, Flatten, Embedding, Concatenate
 
 from tensorflow_addons.layers import SpectralNormalization
 
 
-from layers import BConv2D, LConv2D, SelfAttention, ResBlock, ConditionalBatchNorm, Projection, Convolution, DenselyConnected, TransposedConvolution
-from utils import cast_img
+from layers import BConv2D, LConv2D, SelfAttention, ResBlock, ConditionalBatchNorm, Projection, \
+    Convolution, DenselyConnected, TransposedConvolution, GLU, WeightedNoise, FeatureNormalization
+from src.utils import cast_img
 import metrics
-from pathlib import Path
-import datetime
-import math
+
+
+class BaseGAN(keras.Model):
+    """Base class for structurally similar GAN training routines. Models with multiple inputs need labels to be last."""
+    def __init__(self,
+                 generator: keras.Model = None,
+                 discriminator: keras.Model = None,
+                 n_classes: int = None,
+                 sampling: str = 'normal',
+                 *args,
+                 **kwargs):
+        """
+        :param generator: a keras.Model instance for the generator. If 'None', build_generator() will be called instead.
+        :param discriminator: a keras.Model instance for the discriminator. If 'None', build_discriminator() will be
+         called instead
+        :param n_classes: number of classes if conditional GANs are used.
+        :param args: args passed to keras.Model
+        :param kwargs: kwargs passed to keras.Model
+        """
+        super(BaseGAN, self).__init__(*args, **kwargs)
+        self.d_optimizer = None
+        self.g_optimizer = None
+        self.d_loss_fn = None
+        self.g_loss_fn = None
+
+        self.generator = generator if generator is not None else self.build_generator()
+        self.discriminator = discriminator if discriminator is not None else self.build_discriminator()
+        self.n_classes = n_classes
+
+        self.batch_dimension = None
+        self.latent_dimension = None
+        self.z = None
+        self.y = None
+        self.d_steps = None
+
+        # define the metrics
+        self._d_loss = keras.metrics.Mean("D_Loss")
+        self._g_loss = keras.metrics.Mean("G_Loss")
+
+    @property
+    def metrics(self):
+        return [self._d_loss, self._g_loss]
+
+    def build_generator(self) -> keras.Model:
+        pass
+
+    def build_discriminator(self) -> keras.Model:
+        pass
+
+    def compile(self,
+                g_optimizer,
+                d_optimizer,
+                d_steps=1,
+                g_loss_fn=None,
+                d_loss_fn=None,
+                metrics=None,
+                **kwargs):
+        """
+        Configures the model for training
+
+        Args:
+            g_optimizer: optimizer instance for the generator
+            d_optimizer: optimizer instance for the discriminator
+            g_loss_fn: (Callable) generator loss function
+            d_loss_fn: (Callable) discriminator loss function
+
+        """
+        super(BaseGAN, self).compile(metrics=metrics)
+        # set static values
+        self.g_optimizer = g_optimizer
+        self.d_optimizer = d_optimizer
+        self.g_loss_fn = g_loss_fn if g_loss_fn is not None else self.generator_loss
+        self.d_loss_fn = d_loss_fn if d_loss_fn is not None else self.discriminator_loss
+
+        # infer latent space and mode of GAN
+        g_input = self.generator.input_shape
+        if isinstance(g_input, list):
+            # multi-input model, labels last
+            g_input = g_input[0]
+        self.latent_dimension = g_input[-1]  # typically (None, Z)
+
+        self.d_steps = d_steps
+
+    @tf.function
+    def generate(self, z=None, y=None, samples=1, training=True):
+        """
+        Generate a sample image where z is the latent vector and y the desired conditioning.
+        The latent vector can be accessed via model.z and is overwritten with each call to "generate"
+        """
+        # TODO: sampling version or move sampling to function
+        if z is None:
+            z = self.sample_latent_vector(shape=(samples, self.latent_dimension))
+        self.z = z
+        if y is None and self.n_classes is not None:
+            y = tf.random.uniform(shape=(samples, 1), minval=0, maxval=self.n_classes, dtype=tf.int64)
+            return self.generator([z, y], training=training), y
+        else:
+            return self.generator(z, training=training)
+
+    def sample_latent_vector(self, shape):
+        return tf.random.normal(shape=shape)
+
+    @tf.function  # Training function
+    def train_step_generator(self):
+        with tf.GradientTape() as gen_tape:
+            generated_image = self.generate(samples=self.batch_dimension)
+            fake_logits = self.discriminator(generated_image, training=True)
+            gen_loss = self.g_loss_fn(fake_logits)
+        gradients_of_generator = gen_tape.gradient(gen_loss, self.generator.trainable_variables)
+        self.g_optimizer.apply_gradients(zip(gradients_of_generator, self.generator.trainable_variables))
+        return gen_loss
+
+    @tf.function
+    def train_step_discriminator(self, data):
+        with tf.GradientTape() as disc_tape:
+            generated_image = self.generate(samples=self.batch_dimension)
+            fake_logits = self.discriminator(generated_image, training=True)
+            real_logits = self.discriminator(data, training=True)
+            disc_loss = self.d_loss_fn(real_logits, fake_logits)
+        gradients_of_discriminator = disc_tape.gradient(disc_loss, self.discriminator.trainable_variables)
+        self.d_optimizer.apply_gradients(zip(gradients_of_discriminator, self.discriminator.trainable_variables))
+        return disc_loss, fake_logits, real_logits
+
+    def train_step(self, data):
+        if isinstance(data, tuple):
+            # conditional gan
+            real_image, label = data
+        else:
+            real_image = data
+            label = None
+        batch_size, h, w, c = real_image
+        self.batch_dimension = batch_size
+
+        # Train the
+        for _ in range(self.d_steps):
+            disc_loss, fake_logits, real_logits = self.train_step_discriminator(data)
+
+        # Train the generator
+        gen_loss = self.train_step_generator()
+
+        self._g_loss.update_state(gen_loss)
+        self._d_loss.update_state(disc_loss)
+
+        return {m.name: m.result() for m in self.metrics}
+
+
+class FastGAN(BaseGAN):
+
+    def __init__(self,
+                 n_classes: int = None,
+                 sampling: str = 'normal',
+                 output_size: int = 512,
+                 latent_dimension: int = 256,
+                 *args,
+                 **kwargs):
+        super(FastGAN, self).__init__(n_classes=n_classes, sampling=sampling)
+        self.output_size = output_size
+        self.channels = 1024
+        self._latent_dimension = latent_dimension
+        self._latent_2d = int(math.sqrt(latent_dimension))
+        self._scale = output_size / self._latent_2d
+        self._scale = int(math.log(self._scale, 2))
+
+    def build_generator(self) -> keras.Model:
+        inputs = tf.keras.Input(shape=(self.z_dim,))
+        x = tf.reshape(inputs, shape=(-1, self._latent_2d, self._latent_2d))
+        for i in range(self._scale):
+            x = Convolution(self.channels // pow(2, i), kernel_size=3, sn=True, padding='same')(x)
+            x = FeatureNormalization()(x)
+            x = GLU(axis=-1)(x)
+            x = UpSampling2D(2, interpolation='nearest')(x)
+            x = WeightedNoise()(x)
+
+        outputs = Convolution(3, 3, activation='tanh', padding='same', sn=True)(x)
+        model = tf.keras.Model(inputs, outputs, name='Generator')
+        return model
+
+    def build_discriminator(self) -> keras.Model:
+        input_image = tf.keras.Input(shape=(None, None, 3))
+        # initial layer
+        x = Convolution(self.channels // pow(2, self._scale - 1), 7, sn=True, padding='same', strides=2)(input_image)
+        x = BatchNormalization()(x)
+        x = keras.layers.LeakyReLU()(x)
+
+        for i in range(1, self._scale):
+            x = Convolution(self.channels // pow(2, self._scale - i - 1), 3, sn=True, padding='same', strides=2)(x)
+            x = BatchNormalization()(x)
+            x = keras.layers.LeakyReLU()(x)
+
+        out = DenselyConnected(1, sn=True)(x)
+        model = tf.keras.Model(inputs=input_image, outputs=out, name='Discriminator')
+        return model
+
+    def discriminator_loss(self, real_output, fake_output):
+        return tf.reduce_mean(tf.nn.relu(1.0 - real_output)) + tf.reduce_mean(tf.nn.relu(1.0 + fake_output))
+
+    def generator_loss(self, fake_output):
+        return -tf.reduce_mean(fake_output)
 
 
 class WGANGP:

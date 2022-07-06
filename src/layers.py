@@ -1,8 +1,110 @@
 import tensorflow as tf
+from tensorflow import keras
 import tensorflow_addons 
 from tensorflow.keras.layers import BatchNormalization, Conv2D, LayerNormalization, MaxPool2D, AveragePooling2D, UpSampling2D, Conv2DTranspose, Dense, Flatten, ReLU, LeakyReLU, Embedding
 from tensorflow.keras.activations import relu
 from tensorflow_addons.layers import SpectralNormalization
+
+
+class GLU(keras.layers.Layer):
+    """
+    Gated linear activation layer
+
+    Source:
+    Dauphin, Yann N., et al. "Language modeling with gated convolutional networks."
+    International conference on machine learning. PMLR, 2017
+    """
+    def __init__(self,
+                 axis: int = -1,
+                 *args,
+                 **kwargs):
+        super(GLU, self).__init__()
+        self.axis = axis
+
+    def build(self, input_shape):
+        dim = input_shape[self.axis]
+        if (dim % 2) != 0:
+            raise ValueError(f"Axis {self.axis} is given but {dim} is not divisible by two")
+
+    def call(self, inputs, **kwargs):
+        out, gate = tf.split(inputs, axis=-1, num_split=2)
+        return out * tf.nn.sigmoid(gate)
+
+
+class PGLU(keras.layers.Layer):
+    """
+    Gated linear activation layer with learnable weights
+
+    Source:
+    Dauphin, Yann N., et al. "Language modeling with gated convolutional networks."
+    International conference on machine learning. PMLR, 2017
+    """
+
+    def __init__(self,
+                 axis: int = -1,
+                 *args,
+                 **kwargs):
+        super(PGLU, self).__init__()
+        self.gate = None
+        self.axis = axis
+
+    def build(self, input_shape):
+        dim = input_shape[self.axis]
+        if (dim % 2) != 0:
+            raise ValueError(f"Axis {self.axis} is given but {dim} is not divisible by two")
+        self.gate = self.add_weight(name="gate", shape=(dim, ), initializer='ones', trainable=True)
+
+    def call(self, inputs, **kwargs):
+        return inputs * tf.nn.sigmoid(self.gate)
+
+
+class WeightedNoise(keras.layers.Layer):
+    def __init__(self,
+                 *args,
+                 **kwargs):
+        super(WeightedNoise, self).__init__(*args, **kwargs)
+
+        self.noise_weight = self.add_weight(name="noise_weight", shape=(1,), initializer='zeros', trainable=True)
+
+    def call(self, inputs, **kwargs):
+        b, h, w, _ = inputs.shape
+        # TODO: Maybe add channel wise noise
+        noise = tf.random.normal(shape=(b,h, w, 1)) * self.noise_weight
+        return inputs + noise
+
+
+class FeatureNormalization(keras.layers.Layer):
+    # also known as InstanceNorm
+    def __init__(self,
+                 variance_epsilon=1e-3,
+                 beta_regularizer=None,
+                 gamma_regularizer=None,
+                 **kwargs):
+        super(FeatureNormalization, self).__init__(**kwargs)
+        self.variance_epsilon = variance_epsilon
+        self.beta = None
+        self.gamma = None
+        self.beta_regularizer = beta_regularizer
+        self.gamma_regularizer = gamma_regularizer
+
+    def build(self, input_shape):
+        # B, H, W, C
+        # Create C independent distributions representing features
+        self.beta = self.add_weight(shape=input_shape[-1], dtype=tf.float32, initializer='zeros', trainable=True,
+                                    regularizer=self.beta_regularizer, name='beta')
+        self.gamma = self.add_weight(shape=input_shape[-1], dtype=tf.float32, initializer='ones', trainable=True,
+                                     regularizer=self.gamma_regularizer,  name='gamma')
+
+    def call(self, inputs, *args, **kwargs):
+        # Get mean variance of each feature and batch independently
+        batch_mean, batch_variance = tf.nn.moments(inputs, axes=[1, 2], keepdims=True)
+        # Normalize inputs
+        # (((X - batch_mean)/batch_var) * variance) + mean =
+        # X - batch_mean * variance/batch_var + mean =
+        # X*variance/batch_var - batch_mean*variance/batch_var + mean
+        inv_var = tf.math.rsqrt(batch_variance + self.variance_epsilon)
+        inv_var *= self.gamma
+        return (inputs * inv_var - (inv_var * batch_mean)) + self.beta
 
 
 class Convolution(tf.keras.layers.Layer):
