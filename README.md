@@ -1,6 +1,6 @@
 # GAN-Projects
 This is a repo implementing and evaluating several different Generative Adversarial Networks for learning purposes.  
-This repo still needs a lot of refactoring and clean-up and is for learning purposes only.  
+This repo still needs a lot of refactoring and clean-up and is for creative purposes only.  
 You can read my summary of the evaluation [here.](https://github.com/smdgn/GAN-Projects/blob/master/Assessment_of_GANs_V1_0.pdf)  
 
 ## Sample Images, trained on CIFAR10
